@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type problem struct {
@@ -51,14 +52,25 @@ func parseLines(lines [][]string) []problem {
 }
 
 // initQuiz initializes quiz-game in the standard i/o
-func initQuiz(problems []problem) (score int) {
+func initQuiz(problems []problem, timer *time.Timer) (score int) {
 	score = 0
 	for i, p := range problems {
 		fmt.Printf("Problem #%d: %s = ", i+1, p.q)
-		var answer string
-		fmt.Scanln(&answer)
-		if answer == p.a {
-			score++
+		answerCh := make(chan string)
+		go func() {
+			var answer string
+			fmt.Scanln(&answer)
+			answerCh <- answer
+		}()
+
+		select {
+		case <-timer.C:
+			fmt.Printf("You scored %d out of %d\n", score, len(problems))
+			return
+		case answer := <- answerCh:
+			if answer == p.a {
+				score++
+			}
 		}
 	}
 
@@ -67,9 +79,14 @@ func initQuiz(problems []problem) (score int) {
 
 func main() {
 	csvFile := flag.String("csv", "problems.csv", "csv file in question/answer format")
+	timeLimit := flag.Int("limit", 30, "time limit for the quiz in seconds")
 	flag.Parse()
 	csvFileData := readCSVFile(csvFile)
 	problems := parseLines(csvFileData)
-	score := initQuiz(problems)
+
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
+	
+	score := initQuiz(problems, timer)
+
 	fmt.Printf("You scored %d out of %d\n", score, len(problems))
 }
